@@ -4,7 +4,6 @@
 
 -- TODO: Actual game
 -- Use HUMP framework for game states/levels and player progression
--- IDEAS: Points vary inversely with generations passed i.e. pts = k / gen
 
 -- State/class libraries
 state = require 'hump.gamestate'
@@ -18,7 +17,8 @@ grid, N = {}, 10
 
 -- Height/width of grid
 -- and pixel spacing
-SIZE, SPACE = 500, 50
+SIZE  = 500
+SPACE = SIZE / N
 
 -- Game state
 paused = false
@@ -36,8 +36,8 @@ end
 
 function love.draw()
 	-- Converts grid coordinate (cell) to pixel
-	function toPixel(a)
-		return SPACE * (a - 1)
+	function toPixel(c)
+		return SPACE * (c - 1)
 	end
 	-- Render grid
 	for x = 1, N do
@@ -47,6 +47,8 @@ function love.draw()
 			else
 				love.graphics.setColor(255, 255, 255)
 			end
+			-- Oddly enough, you have to switch x and y
+			-- to draw the cell. Same for converting back
 			love.graphics.rectangle("fill",
 				toPixel(y), toPixel(x), SPACE, SPACE)
 		end
@@ -75,17 +77,17 @@ function love.update(dt)
 			return grid[x][y]
 		end
 	end
-	for y = 1, N do
-		for x = 1, N do
+	for x = 1, N do
+		for y = 1, N do
 			-- Moore neighborhood
 			local neighbors = cell(x + 1, y    ) +
-							  cell(x - 1, y    ) +
-							  cell(x    , y + 1) +
-							  cell(x    , y - 1) +
-							  cell(x + 1, y + 1) +
-							  cell(x + 1, y - 1) +
-							  cell(x - 1, y + 1) +
-							  cell(x - 1, y - 1)
+			                  cell(x - 1, y    ) +
+			                  cell(x    , y + 1) +
+			                  cell(x    , y - 1) +
+			                  cell(x + 1, y + 1) +
+			                  cell(x + 1, y - 1) +
+			                  cell(x - 1, y + 1) +
+			                  cell(x - 1, y - 1)
 			-- PATRICK PLS FIX
 			-- We play by da rules mang
 			living = grid[x][y] == ALIVE
@@ -102,8 +104,8 @@ end
 -- Allows player to toggle cell states on grid
 function love.mousepressed(x, y, button)
 	-- Converts pixel to grid coordinate (cell)
-	function toCell(a)
-		return math.floor((a + 1) / SPACE + 1)
+	function toCell(p)
+		return math.floor((p + 1) / SPACE + 1)
 	end
 	if button == 'l' then
 		local yy, xx = toCell(x), toCell(y)
