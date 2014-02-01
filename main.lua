@@ -1,5 +1,5 @@
 --[[
-    Life, by Siva Somayyajula
+    life, by Siva Somayyajula
              Patrick Do
              Shrikant Mishra
              Peter Zhao
@@ -8,30 +8,57 @@
 state   = require 'hump.gamestate'
 class   = require 'hump.class'
 signal  = require 'hump.signal'
---message = require 'message.MessageInABottle'
+--message = require 'messages.MessageInABottle'
+
 --IDEA: Use signals to check if user lost/won and same for AI?
+--gui 'quickie' will be used for deployments
 
 DEAD, ALIVE = 0, 1
-N   , SIZE  = 100, 1000
-SPACE       = SIZE / N
-score       = 0
+
+local width, height = love.graphics.getDimensions()
+if width < height then
+	SIZE = width
+else
+	SIZE = height
+end
+
+SPACE        = 20
+N            = SIZE / SPACE
+BLACK, BLUE,
+       WHITE = {49, 79, 79}, {100, 149, 237},
+	           {255, 255, 255}
+
+GAMESPEED	 = 5
+score        = 0
+
+player = class {
+	init = function(self)
+	end
+}
+
+AI = class {
+	init = function(self)
+	end
+}
 
 level = class {
 	init = function(self)
 		self.grid   = {}
+		self.buffer = {}
 		self.paused = false
-		--TODO: replace with map from ctor
 		for x = 1, N do
 			self.grid[x] = {}
+			self.buffer[x] = {}
 			for y = 1, N do
-				self.grid[x][y] = DEAD
+				self.grid[x][y]   = DEAD
+				self.buffer[x][y] = DEAD
 			end
 		end
 	end
 }
 
 function level:enter(previous)
-	love.graphics.setBackgroundColor(255, 255, 255)
+	love.graphics.setBackgroundColor(unpack(BLACK))
 	love.graphics.clear()
 end
 
@@ -44,36 +71,58 @@ end
 t = 0
 function level:update(dt)
 	t = t + 1
-	if self.paused or t < 20 then
+	if self.paused or t < GAMESPEED then
 		return
 	end
 	t = 0
-	function cell(x, y)
-		if x > N or y > N or x < 1 or y < 1 then
-			return DEAD
-		else
-			return self.grid[x][y]
-		end
-	end
-	for x = 1, N do
-		for y = 1, N do
-			local neighbors = cell(x + 1, y    ) +
-			                  cell(x - 1, y    ) +
-			                  cell(x    , y + 1) +
-			                  cell(x    , y - 1) +
-			                  cell(x + 1, y + 1) +
-			                  cell(x + 1, y - 1) +
-			                  cell(x - 1, y + 1) +
-			                  cell(x - 1, y - 1)
-			if self.grid[x][y] == ALIVE and
-			  (neighbors < 2       or
-			   neighbors > 3)      then
-				self.grid[x][y] = DEAD
-			elseif neighbors == 3 then
-				self.grid[x][y] = ALIVE
+	function clear()
+		for x = 1, N do
+			for y = 1, N do
+				self.buffer[x][y] = self.grid[x][y]
 			end
 		end
 	end
+	function copy_buffer()
+		for x = 1, N do
+			for y = 1, N do
+				self.grid[x][y] = self.buffer[x][y]
+			end
+		end
+	end
+	function cell(x, y)
+		if x < 1 then
+			x = N
+		elseif x > N then
+			x = 1
+		end
+		if y < 1 then
+			y = N
+		elseif y > N then
+			y = 1
+		end
+		return self.grid[x][y]
+	end
+	clear()
+	for x = 1, N do
+		for y = 1, N do
+			local neighbors = 0
+			for i = -1, 1 do
+				for j = -1, 1 do
+					if not (i == 0 and j == 0) then
+						neighbors = neighbors + cell(x + i, y + j)
+					end
+				end
+			end
+			if self.grid[x][y] == ALIVE and
+			  (neighbors < 2            or
+			   neighbors > 3)           then
+				self.buffer[x][y] = DEAD
+			elseif neighbors == 3 then
+				self.buffer[x][y] = ALIVE
+			end
+		end
+	end
+	copy_buffer()
 end
 
 function level:draw()
@@ -83,15 +132,15 @@ function level:draw()
 	for x = 1, N do
 		for y = 1, N do
 			if self.grid[x][y] == ALIVE then
-				love.graphics.setColor(0, 0, 1)
+				love.graphics.setColor(unpack(BLUE))
 			else
-				love.graphics.setColor(255, 255, 255)
+				love.graphics.setColor(unpack(BLACK))
 			end
 			love.graphics.rectangle("fill",
 				toPixel(y), toPixel(x), SPACE, SPACE)
 		end
 	end
-	love.graphics.setColor(0, 0, 0)
+	love.graphics.setColor(unpack(WHITE))
 	for x = 0, SIZE, SPACE do
 		love.graphics.line(x, 0, x, SIZE)
 	end
@@ -138,6 +187,10 @@ local level1,
                 level(),
                 level()
 
+function menu:enter(previous)
+	--cue start music
+end
+
 function menu:draw()
 	--draw menu/title screen
 end
@@ -151,26 +204,6 @@ end
 function love.load()
 	state.registerEvents()
 	state.switch(menu)
-end
-
-function love.update(dt)
-	state.update(dt)
-end
-
-function love.draw()
-	state.draw()
-end
-
-function love.mousereleased(x, y, button)
-	state.mousepressed(x, y, button)
-end
-
-function love.keyreleased(key)
-	state.keypressed(key)
-end
-
-function love.focus(f)
-	state.focus(f)
 end
 
 function love.quit()
