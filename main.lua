@@ -22,14 +22,17 @@ CBLACK, CBLUE,
 CWHITE, CRED   = {49, 79, 79}, {100, 149, 237},
                  {255, 255, 255}, {205, 92, 92}
 
-GAMESPEED    = 5
-score        = 0
+GAMESPEED = 5
+score, t  = 0, 0
 
 level = class {
 	init = function(self)
-		self.grid   = {}
-		self.buffer = {}
-		self.paused = false
+		self.grid        = {}
+		self.buffer      = {}
+		self.paused      = false
+		self.ghost       = false
+		self.orientation = 3
+		level:patterns()
 		for x = 1, N do
 			self.grid[x] = {}
 			self.buffer[x] = {}
@@ -44,15 +47,26 @@ level = class {
 function level:enter(previous)
 	love.graphics.setBackgroundColor(unpack(CBLACK))
 	love.graphics.clear()
+	self.paused = true
+end
+
+function level:patterns()
+	xs, ys, centerFactor = {}, {}, 2
+	image = love.graphics.newImage("gfx/ghost.png")
+	local stng, index = "", 1
+	for line in love.filesystem.lines("gfx/patterns/glider.txt") do
+		xs[#xs + 1] = tonumber(string.sub(line, string.find(line, ",") + 1)) 
+		ys[#ys + 1] = tonumber(string.sub(line, 0, string.find(line, ",") - 1))
+	end
+	maxX = math.max(unpack(xs))
+	maxY = math.max(unpack(ys))
 end
 
 function level:leave()
 	--increment score and stuff
-	--maybe change to signals idk
-	--we'll figure it out sooner or later
+	--maybe change to signals
 end
 
-t = 0
 function level:update(dt)
 	t = t + 1
 	if self.paused or t < GAMESPEED then
@@ -121,9 +135,48 @@ function level:update(dt)
 	copy_buffer()
 end
 
+function level:toPixel(c)
+	return SPACE * (c - 1)
+end
+
+function level:toCell(p)
+	return math.floor((p + 1) / SPACE + 1)
+end
+
 function level:draw()
-	function toPixel(c)
-		return SPACE * (c - 1)
+	function ghosting()
+		local x, y = love.mouse.getPosition()
+		if x < level:toPixel(centerFactor) then
+			x = level:toPixel(centerFactor)
+		end
+		if y < level:toPixel(centerFactor) then
+			y = level:toPixel(centerFactor)
+		end
+		if x > SIZE - level:toPixel(maxX) then
+			x = SIZE - level:toPixel(maxX)
+		end
+		if y > SIZE - level:toPixel(maxY) then
+			y = SIZE - level:toPixel(maxY)
+		end
+		local txs, tys = {}, {}
+		for n = 1, #xs do
+			if self.orientation == 0 then
+				txs[n] = xs[n]
+				tys[n] = ys[n]
+			elseif self.orientation == 2 then
+				txs[n] = maxX - xs[n]
+				tys[n] = maxY - ys[n]
+			elseif self.orientation == 1 then
+				txs[n] = maxX - xs[n]
+				tys[n] = ys[n]
+			elseif self.orientation == 3 then
+				txs[n] = xs[n]
+				tys[n] = maxY - ys[n]
+			end
+			local ghostx = txs[n] + level:toCell(x)
+			local ghosty = tys[n] + level:toCell(y)
+			love.graphics.draw(image, level:toPixel(ghostx), level:toPixel(ghosty))
+		end
 	end
 	for x = 1, N do
 		for y = 1, N do
@@ -135,10 +188,13 @@ function level:draw()
 				love.graphics.setColor(unpack(CBLACK))
 			end
 			love.graphics.rectangle("fill",
-				toPixel(y), toPixel(x), SPACE, SPACE)
+				level:toPixel(y), level:toPixel(x), SPACE, SPACE)
 		end
 	end
 	love.graphics.setColor(unpack(CWHITE))
+	if ghost then
+		ghosting()
+	end
 	for x = 0, SIZE, SPACE do
 		love.graphics.line(x, 0, x, SIZE)
 	end
@@ -148,22 +204,54 @@ function level:draw()
 end
 
 function level:focus(f)
-	--show pause message
 	self.paused = not f
 end
 
 function level:keyreleased(key)
+	--IMPORTANT: levelcreator.txt is in a path like this one C:/Users/Patrick/AppData/Roaming/LOVE/life5-master/levelwriter.txt
+	--If you want to save a "level" for use later, better go there and copy and paste it into a new text file. 
+	--https://www.love2d.org/forums/viewtopic.php?f=4&p=157187
+	function savemap()
+		local stng = ""
+		for x = 1, N do
+				for y = 1, N do
+					if self.grid[x][y] ~= DEAD then
+						stng = stng .. tostring(x) .. ", " .. tostring(y) .. "\r\n"
+					end
+				end
+		end
+		love.filesystem.write("levelcreator.txt", stng) 
+	end
+	function draw_map()
+		for line in love.filesystem.lines("enemies.ini") do
+   			self.grid[tonumber(string.sub(line, 0, string.find(line, ",") - 1))]
+   				[tonumber(string.sub(line, string.find(line, ",") + 1))] = RED
+		end
+	end
+	function destroy_map()
+		for x = 1, N do
+			for y = 1, N do
+				self.grid[x][y] = DEAD
+			end
+		end
+	end
 	if key == ' ' then
-		--show pause message
 		self.paused = not self.paused
+	elseif key == 's' then
+		save_map()
+	elseif key == 'd' then
+		draw_map()
+	elseif key == 'c' then
+		destroy_map()
+	elseif key == 'g' then
+		ghost = not ghost
+	elseif key == 'left' or key == 'right' then
+		self.orientation = (self.orientation + 1) % 4
 	end
 end
 
 function level:mousereleased(x, y, button)
-	function toCell(p)
-		return math.floor((p + 1) / SPACE + 1)
-	end
-	local yy, xx = toCell(x), toCell(y)
+	local yy, xx = level:toCell(x), level:toCell(y)
 	if yy <= N and xx <= N and
 	   yy >= 1 and xx >= 1 then
 		if self.grid[xx][yy] ~= DEAD then
@@ -190,11 +278,9 @@ local level1,
                 level()
 
 function menu:enter(previous)
-	--cue start music
 end
 
 function menu:draw()
-	--draw menu/title screen
 end
 
 function menu:keyreleased(key)
@@ -209,8 +295,4 @@ function love.load()
 end
 
 function love.quit()
-	-- end screen
-	-- inspirational message on how cellular automata
-	-- is literally the best thing ever invented
-	-- and how this game made your life better in every way
 end
